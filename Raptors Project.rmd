@@ -1,0 +1,100 @@
+---
+title: "Raptors project"
+output: pdf_document
+date: "2026-02-22"
+---
+
+```{r}
+library(tidyverse)
+library(broom)
+library(janitor)
+library(knitr)
+```
+
+```{r}
+nba = read_csv("games-2.csv")
+
+#filter the raptors 
+raptors = nba %>%
+  filter(HOME_TEAM_ID == 1610612761 | VISITOR_TEAM_ID == 1610612761)
+
+```
+
+```{r}
+#cleaning the data
+raptors = raptors %>%
+  mutate(
+    team_points = ifelse(HOME_TEAM_ID == 1610612761, PTS_home, PTS_away),
+    opp_points  = ifelse(HOME_TEAM_ID == 1610612761, PTS_away, PTS_home),
+    home = ifelse(HOME_TEAM_ID == 1610612761, 1, 0),
+    win = ifelse(team_points > opp_points, 1, 0)
+  )
+
+raptors <- raptors %>%
+  filter(!is.na(team_points),
+         !is.na(opp_points))
+```
+
+```{r}
+raptors <- raptors %>%
+  mutate(win = ifelse(team_points > opp_points, 1, 0))
+mean(raptors$win, na.rm = TRUE)
+```
+The Raptors won approximately 51.5% of games across the observed seasons. This means they were slightly above average overall. It gives a baseline understanding of how competitive the team was during the seasons analyzed.
+
+```{r}
+#home court advantage
+raptors %>%
+  group_by(home) %>%
+  summarise(win_rate = mean(win))
+```
+The Raptors won more games at home than away.This shows that playing at home gives the team an advantage. Possible reasons include:support from fans, less travel fatigue, familiarity with the arena etc. 
+
+```{r}
+ggplot(raptors, aes(x = team_points, fill = factor(win))) +
+  geom_density(alpha = 0.5)
+```
+The density plot showed that when the Raptors scored more points, they were much more likely to win.
+This confirms something expected but important: scoring more leads to winning.
+
+```{r}
+#logistics regression model
+raptors <- raptors %>%
+  mutate(
+    team_fg_pct = ifelse(HOME_TEAM_ID == 1610612761,
+                         FG_PCT_home,
+                         FG_PCT_away),
+
+    team_fg3_pct = ifelse(HOME_TEAM_ID == 1610612761,
+                          FG3_PCT_home,
+                          FG3_PCT_away),
+
+    team_reb = ifelse(HOME_TEAM_ID == 1610612761,
+                      REB_home,
+                      REB_away)
+  )
+
+model = glm(win ~ + team_fg_pct + team_reb + home,
+             data = raptors,
+             family = "binomial")
+
+summary(model)
+
+```
+FGP(field goal point) was the strongest factor.
+When the Raptors shoot more accurately, their chances of winning increase significantly.
+In simple words:
+Better shooting = much higher chance of winning.
+Even small improvements in shooting percentage make a noticeable difference. When the Raptors grab more rebounds, their probability of winning increases.Playing at home increases the probability of winning, even after accounting for shooting and rebounds.
+This confirms that home court matters.The Raptors have a real advantage when they play at home.
+```{r}
+#predict 
+raptors$predicted_win_prob <- predict(model, type = "response")
+ggplot(raptors, aes(x = team_points, y = predicted_win_prob)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth()
+```
+The plot shows that as the Raptors score more points, the predicted probability of winning increases.
+In simple terms:
+More points → higher chance of winning.
+The upward curve confirms that scoring performance strongly influences win probability.
